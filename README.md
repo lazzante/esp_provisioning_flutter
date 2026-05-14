@@ -132,6 +132,20 @@ Minimum iOS deployment target: **13.0** (required by ESPProvision).
 
 ### Android
 
+The plugin depends on Espressif's `esp-idf-provisioning-android` library,
+which is published only via JitPack. Add JitPack to your project-level
+`android/build.gradle.kts` (or `build.gradle`):
+
+```kotlin
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url = uri("https://jitpack.io") }
+    }
+}
+```
+
 Add to `android/app/src/main/AndroidManifest.xml`:
 
 ```xml

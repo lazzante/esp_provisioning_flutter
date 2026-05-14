@@ -1,3 +1,40 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-  package="com.rainybit.esp_provisioning_flutter">
+    package="com.rainybit.esp_provisioning_flutter">
+
+    <!--
+        Permissions declared at the library level so that consuming apps
+        inherit them automatically. The runtime prompting flow stays in
+        the host app (the plugin throws PermissionDeniedException when a
+        permission is missing rather than prompting itself) so the app
+        controls prompt timing and rationale UI.
+    -->
+
+    <!-- Android 12+ (API 31+) Bluetooth runtime permissions. -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <!-- Pre-Android 12 (API 30 and below) BLE compatibility. -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30" />
+
+    <!-- SoftAP transport (PR #5) — required for joining the device's
+         provisioning access point and routing local-network requests. -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <uses-feature
+        android:name="android.hardware.bluetooth_le"
+        android:required="false" />
 </manifest>

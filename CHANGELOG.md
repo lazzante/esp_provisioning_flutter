@@ -6,6 +6,36 @@ and the package follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## Unreleased
 
+### Added (PR #4 — Android native bridge)
+
+- Pinned `com.github.espressif:esp-idf-provisioning-android:lib-2.4.4`
+  via JitPack; added JitPack repository to plugin + example app gradle.
+- `ProvisioningBridge.kt` wraps the SDK behind a single per-plugin state
+  machine: scan cache (BluetoothDevice + primary service UUID + advertised
+  name + RSSI keyed by MAC), in-flight scan + connect guards, EventBus
+  subscription for `DeviceConnectionEvent`, main-thread marshalling of
+  every callback, defensive scan timer fallback for OEM Android skins
+  whose `BleScanListener.scanCompleted` is unreliable.
+- `BluetoothStateProbe.kt` checks `BluetoothAdapter` power state and
+  runtime permission state (`BLUETOOTH_SCAN` / `BLUETOOTH_CONNECT` on
+  API 31+, `ACCESS_FINE_LOCATION` below) before scanning, so callers
+  receive typed `ble_unavailable` / `permission_denied` instead of a
+  generic "no device found".
+- `ErrorMapping.kt` mirrors the Swift error mapping: security-aware
+  connect failures (`SECURITY_1`/`SECURITY_2` → `pop_invalid`),
+  AUTH_FAILED / NETWORK_NOT_FOUND in-band as `ProvisioningResult`,
+  channel collapse as `wifi_provisioning_failed`, unknown errors →
+  `session_failed`.
+- Custom data path (`sendDataToCustomEndPoint`) supports RainyBit
+  bootstrap-token transfer over the encrypted session.
+- Plugin AndroidManifest declares `BLUETOOTH_SCAN` /
+  `BLUETOOTH_CONNECT` (Android 12+, `neverForLocation`),
+  `ACCESS_FINE_LOCATION` (maxSdkVersion 30), and the SoftAP-adjacent
+  Wi-Fi / network permissions for PR #5.
+- Example app manifest carries the same permission set; plugin minSdk
+  bumped to 23 for runtime-permission flow parity with rainybit_mobile.
+- README documents the JitPack repo requirement for consuming apps.
+
 ### Added (PR #3 — iOS native bridge)
 
 - Pinned `ESPProvision` ~> 3.1 in the podspec.

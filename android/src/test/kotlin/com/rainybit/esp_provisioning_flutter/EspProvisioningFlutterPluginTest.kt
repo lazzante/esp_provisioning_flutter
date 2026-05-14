@@ -1,27 +1,20 @@
 package com.rainybit.esp_provisioning_flutter
 
-import io.flutter.plugin.common.MethodCall
-import io.flutter.plugin.common.MethodChannel
-import org.mockito.Mockito
 import kotlin.test.Test
+import kotlin.test.assertNotNull
 
-/*
- * This demonstrates a simple unit test of the Kotlin portion of this plugin's implementation.
- *
- * Once you have built the plugin's example app, you can run these tests from the command
- * line by running `./gradlew testDebugUnitTest` in the `example/android/` directory, or
- * you can run them directly from IDEs that support JUnit such as Android Studio.
+/**
+ * Smoke test that the plugin class still constructs cleanly after the
+ * PR #4 refactor. Real method-handler tests against the
+ * `esp-idf-provisioning-android` SDK land in PR #6 (XCTest equivalents
+ * on the iOS side will land the same time) — they require Robolectric or
+ * an instrumented runner and an EventBus harness that isn't worth
+ * standing up before SoftAP support lands in PR #5.
  */
-
 internal class EspProvisioningFlutterPluginTest {
     @Test
-    fun onMethodCall_getPlatformVersion_returnsExpectedValue() {
+    fun pluginConstructs() {
         val plugin = EspProvisioningFlutterPlugin()
-
-        val call = MethodCall("getPlatformVersion", null)
-        val mockResult: MethodChannel.Result = Mockito.mock(MethodChannel.Result::class.java)
-        plugin.onMethodCall(call, mockResult)
-
-        Mockito.verify(mockResult).success("Android " + android.os.Build.VERSION.RELEASE)
+        assertNotNull(plugin)
     }
 }

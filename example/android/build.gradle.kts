@@ -2,6 +2,11 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        // Espressif's Android provisioning SDK ships only via JitPack.
+        // Plugin-declared repos do not propagate to consuming apps, so
+        // every host app that includes esp_provisioning_flutter must add
+        // this line. See the plugin README for details.
+        maven { url = uri("https://jitpack.io") }
     }
 }
 

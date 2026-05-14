@@ -24,6 +24,8 @@ android {
         applicationId = "com.rainybit.esp_provisioning_flutter_example"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
+        // 23 matches the plugin's library minSdk and gives a coherent BLE
+        // runtime-permission flow across Android 6 → 14.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

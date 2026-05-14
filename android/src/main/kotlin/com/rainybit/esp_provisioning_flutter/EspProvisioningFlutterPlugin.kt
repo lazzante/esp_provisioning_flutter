@@ -1,5 +1,6 @@
 package com.rainybit.esp_provisioning_flutter
 
+import android.content.Context
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
@@ -10,29 +11,28 @@ import io.flutter.plugin.common.MethodChannel.Result
 /**
  * Android host plugin for `esp_provisioning_flutter`.
  *
- * PR #2 ships method/event channel scaffolding only — every imperative
- * method responds with `notImplemented()` and the event channel emits no
- * events. PR #4 wires these handlers to Espressif's
- * `esp-idf-provisioning-android` library (X25519/AES-GCM session, BLE GATT
- * transport, custom data endpoints) pulled in via JitPack.
- *
- * Channel naming: `com.rainybit.esp_provisioning_flutter/methods` for RPC,
- * `com.rainybit.esp_provisioning_flutter/events` for the lifecycle stream.
- * The Dart-side `MethodChannelEspProvisioning` references these strings
- * verbatim — keep in sync if either side renames.
+ * Owns the method channel, the event channel, and the [ProvisioningBridge]
+ * instance that talks to Espressif's `esp-idf-provisioning-android` SDK.
+ * The plugin class itself is deliberately thin — every non-trivial
+ * decision lives in the bridge, mirroring the iOS-side split between
+ * `EspProvisioningFlutterPlugin.swift` and `ProvisioningBridge.swift`.
  */
 class EspProvisioningFlutterPlugin :
     FlutterPlugin,
     MethodCallHandler,
-    EventChannel.StreamHandler {
+    EventChannel.StreamHandler,
+    EspEventEmitter {
 
     private lateinit var methodChannel: MethodChannel
     private lateinit var eventChannel: EventChannel
-
-    @Suppress("unused")
     private var eventSink: EventChannel.EventSink? = null
+    private var bridge: ProvisioningBridge? = null
+    private var applicationContext: Context? = null
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        applicationContext = binding.applicationContext
+        bridge = ProvisioningBridge(binding.applicationContext, this)
+
         methodChannel = MethodChannel(
             binding.binaryMessenger,
             "com.rainybit.esp_provisioning_flutter/methods"
@@ -47,18 +47,72 @@ class EspProvisioningFlutterPlugin :
     }
 
     override fun onMethodCall(call: MethodCall, result: Result) {
+        val bridge = this.bridge ?: run {
+            result.error(
+                "session_failed",
+                "Plugin not attached to a Flutter engine yet",
+                null
+            )
+            return
+        }
         when (call.method) {
-            "scanBleDevices",
-            "stopBleScan",
-            "connect",
-            "scanWifiNetworks",
-            "provisionWifi",
-            "sendCustomData",
-            "disconnect" -> {
-                // Wired in PR #4 once the esp-idf-provisioning-android
-                // library is integrated.
-                result.notImplemented()
+            "scanBleDevices" -> {
+                val prefix = call.argument<String>("devicePrefix")
+                val timeoutMs = call.argument<Int>("timeoutMs")
+                if (prefix == null || timeoutMs == null) {
+                    result.error(
+                        "session_failed",
+                        "Invalid arguments for 'scanBleDevices'",
+                        null
+                    )
+                    return
+                }
+                bridge.scanBleDevices(prefix, timeoutMs, result)
             }
+            "stopBleScan" -> bridge.stopBleScan(result)
+            "connect" -> {
+                @Suppress("UNCHECKED_CAST")
+                val deviceMap = call.argument<Map<String, Any?>>("device")
+                val pop = call.argument<String>("proofOfPossession")
+                val security = call.argument<Int>("security")
+                if (deviceMap == null || pop == null || security == null) {
+                    result.error(
+                        "session_failed",
+                        "Invalid arguments for 'connect'",
+                        null
+                    )
+                    return
+                }
+                bridge.connect(deviceMap, pop, security, result)
+            }
+            "scanWifiNetworks" -> bridge.scanWifiNetworks(result)
+            "provisionWifi" -> {
+                val ssid = call.argument<String>("ssid")
+                val passphrase = call.argument<String>("passphrase")
+                if (ssid == null || passphrase == null) {
+                    result.error(
+                        "session_failed",
+                        "Invalid arguments for 'provisionWifi'",
+                        null
+                    )
+                    return
+                }
+                bridge.provisionWifi(ssid, passphrase, result)
+            }
+            "sendCustomData" -> {
+                val endpoint = call.argument<String>("endpoint")
+                val data = call.argument<ByteArray>("data")
+                if (endpoint == null || data == null) {
+                    result.error(
+                        "session_failed",
+                        "Invalid arguments for 'sendCustomData'",
+                        null
+                    )
+                    return
+                }
+                bridge.sendCustomData(endpoint, data, result)
+            }
+            "disconnect" -> bridge.disconnect(result)
             else -> result.notImplemented()
         }
     }
@@ -75,5 +129,17 @@ class EspProvisioningFlutterPlugin :
         methodChannel.setMethodCallHandler(null)
         eventChannel.setStreamHandler(null)
         eventSink = null
+        bridge?.dispose()
+        bridge = null
+        applicationContext = null
+    }
+
+    // MARK: - EspEventEmitter
+
+    override fun emit(event: Map<String, Any?>) {
+        // EventSink may be nil if no Dart-side listener is attached;
+        // events are advisory and the imperative API still returns the
+        // authoritative result, so we drop silently rather than buffer.
+        eventSink?.success(event)
     }
 }
