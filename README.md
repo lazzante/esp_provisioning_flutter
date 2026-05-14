@@ -1,7 +1,9 @@
 # esp_provisioning_flutter
 
 [![pub package](https://img.shields.io/pub/v/esp_provisioning_flutter.svg)](https://pub.dev/packages/esp_provisioning_flutter)
+[![pub points](https://img.shields.io/pub/points/esp_provisioning_flutter)](https://pub.dev/packages/esp_provisioning_flutter/score)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Platforms](https://img.shields.io/badge/platforms-iOS%20%7C%20Android-blue.svg)](https://pub.dev/packages/esp_provisioning_flutter)
 
 A Flutter plugin for provisioning Espressif **ESP32** devices over **BLE** or
 **SoftAP**, wrapping the official Espressif SDKs:
@@ -243,7 +245,32 @@ The remaining flow (`scanWifiNetworks`, `provisionWifi`, `sendCustomData`,
 | **#3** | iOS native bridge — ESPProvision Pod |
 | **#4** | Android native bridge — esp-idf-provisioning-android (JitPack) |
 | **#5** | SoftAP fallback transport (BLE + SoftAP unified API) |
-| #6 | Integration tests + example app polish + pub.dev publication |
+| **#6** | Native unit tests (iOS XCTest, Android JVM), example app polish, pub.dev prep |
+| 1.0 | Pilot batch real-device verification → stable release |
+
+---
+
+## Migrating from `flutter_esp_ble_prov` (community package)
+
+`flutter_esp_ble_prov` is the most widely-deployed community plugin for
+ESP32 BLE provisioning. It has not been updated against the security2
+SRP6a handshake or current ESP-IDF releases, and it does not expose
+custom data endpoints. The contract differences are small enough that
+most migrations are mechanical:
+
+| `flutter_esp_ble_prov`                                  | `esp_provisioning_flutter` (this package)                              |
+|---------------------------------------------------------|-----------------------------------------------------------------------|
+| `FlutterEspBleProv().scanBleDevices(prefix)`            | `EspProvisioning().scanBleDevices(devicePrefix: prefix)`              |
+| `scanWifiNetworks(deviceName, pop)`                     | `connect(device:, proofOfPossession:)` + `scanWifiNetworks()`         |
+| `provisionWifi(deviceName, pop, ssid, password)`        | `provisionWifi(ssid:, passphrase:)` (connect first)                   |
+| Untyped string exceptions                               | Sealed `EspProvisioningException` hierarchy (exhaustive `switch`)     |
+| BLE only                                                | BLE + SoftAP through the same `connect()` surface (see above)         |
+| —                                                       | `sendCustomData(endpoint:, data:)` for ESP-IDF custom endpoints       |
+| Security0/1 implicit                                    | `EspSecurity.security2` default + explicit enum                       |
+
+A migration typically takes <100 lines of changes across a typical
+provisioning UI. The `events` broadcast stream is additive — old code
+that ignores it keeps working unchanged.
 
 ---
 

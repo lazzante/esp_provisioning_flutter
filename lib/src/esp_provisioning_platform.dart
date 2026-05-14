@@ -71,7 +71,7 @@ abstract base class EspProvisioningPlatform extends PlatformInterface {
   /// using [proofOfPossession] and [security]. Throws an
   /// [EspProvisioningException] on failure.
   ///
-  /// When [device.transport] is [EspDeviceTransport.softAp],
+  /// When the [device]'s transport is [EspDeviceTransport.softAp],
   /// [softApPassphrase] is the password of the device's provisioning
   /// access point (often empty for ESP-IDF stock firmware). Ignored for
   /// BLE devices.

@@ -47,6 +47,9 @@ class _ProvisioningHomePageState extends State<ProvisioningHomePage> {
   ProvisioningResult? _lastResult;
   String _status = 'Idle.';
   bool _busy = false;
+  bool _scanning = false;
+  EspProvisioningPhase? _currentPhase;
+  EspProvisioningException? _lastError;
   StreamSubscription<EspProvisioningEvent>? _eventsSub;
 
   @override
@@ -54,6 +57,7 @@ class _ProvisioningHomePageState extends State<ProvisioningHomePage> {
     super.initState();
     _eventsSub = _esp.events.listen((event) {
       setState(() {
+        _currentPhase = event.phase;
         _status = 'event: ${event.phase.name}'
             '${event.message == null ? '' : ' — ${event.message}'}';
       });
@@ -75,23 +79,38 @@ class _ProvisioningHomePageState extends State<ProvisioningHomePage> {
     setState(() {
       _busy = true;
       _status = '$label …';
+      _lastError = null;
     });
     try {
       await body();
       setState(() => _status = '$label ✓');
     } on EspProvisioningException catch (e) {
-      setState(() => _status = '$label ✗ ${e.code}: ${e.message}');
+      setState(() {
+        _status = '$label ✗ ${e.code}: ${e.message}';
+        _lastError = e;
+      });
     } finally {
       setState(() => _busy = false);
     }
   }
 
-  Future<void> _scan() => _run('Scan ${_transport.name}', () async {
+  Future<void> _scan() async {
+    setState(() => _scanning = true);
+    try {
+      await _run('Scan ${_transport.name}', () async {
         final devices = _transport == EspDeviceTransport.ble
             ? await _esp.scanBleDevices(devicePrefix: 'PROV_')
             : await _esp.scanSoftApDevices(devicePrefix: 'PROV_');
         setState(() => _devices = devices);
       });
+    } finally {
+      if (mounted) setState(() => _scanning = false);
+    }
+  }
+
+  Future<void> _cancelScan() async {
+    await _esp.stopBleScan();
+  }
 
   Future<void> _connect(EspDevice device) => _run('Connect', () async {
         await _esp.connect(
@@ -142,11 +161,54 @@ class _ProvisioningHomePageState extends State<ProvisioningHomePage> {
     return Scaffold(
       appBar: AppBar(title: const Text('esp_provisioning_flutter')),
       body: AbsorbPointer(
-        absorbing: _busy,
+        // During a scan we explicitly want the user to be able to hit
+        // Cancel; only the non-scan busy states block all input.
+        absorbing: _busy && !_scanning,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Text('Status: $_status', style: const TextStyle(fontFamily: 'monospace')),
+            Row(children: [
+              Expanded(
+                child: Text('Status: $_status',
+                  style: const TextStyle(fontFamily: 'monospace'),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis),
+              ),
+              if (_currentPhase != null) ...[
+                const SizedBox(width: 8),
+                Chip(
+                  label: Text(_currentPhase!.name),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
+            ]),
+            if (_lastError != null) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(children: [
+                  Icon(Icons.error_outline,
+                    color: Theme.of(context).colorScheme.onErrorContainer),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      '${_lastError!.code}: ${_lastError!.message}',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onErrorContainer,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => setState(() => _lastError = null),
+                  ),
+                ]),
+              ),
+            ],
             const Divider(height: 32),
             SegmentedButton<EspDeviceTransport>(
               segments: const <ButtonSegment<EspDeviceTransport>>[
@@ -187,10 +249,22 @@ class _ProvisioningHomePageState extends State<ProvisioningHomePage> {
               ),
             ],
             const SizedBox(height: 16),
-            FilledButton(
-              onPressed: _busy ? null : _scan,
-              child: Text('1. Scan ${_transport.name} devices'),
-            ),
+            Row(children: [
+              Expanded(
+                child: FilledButton(
+                  onPressed: _busy ? null : _scan,
+                  child: Text('1. Scan ${_transport.name} devices'),
+                ),
+              ),
+              if (_scanning) ...[
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _cancelScan,
+                  icon: const Icon(Icons.stop_circle_outlined),
+                  label: const Text('Cancel'),
+                ),
+              ],
+            ]),
             if (_transport == EspDeviceTransport.softAp) ...[
               const SizedBox(height: 8),
               // iOS cannot enumerate Wi-Fi networks — fall back to a manual

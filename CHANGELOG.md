@@ -6,6 +6,30 @@ and the package follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## Unreleased
 
+### Added (PR #6 — Native unit tests + example polish + pub.dev prep)
+
+- iOS XCTest target wired with 12 unit tests covering plugin smoke
+  paths, the iOS SoftAP "explicitly unsupported" contract, and the
+  full security-aware `ErrorMapping` table (sec2/sec1/sec0 connect
+  failure dispatch, softap_connection_failed ssid detail,
+  bleFailedToConnect → device_not_found, AUTH_FAILED /
+  NETWORK_NOT_FOUND in-band result maps). All pass on the iPhone 16
+  Pro simulator.
+- Android JVM tests (11) mirror the iOS suite for the Kotlin
+  `ErrorMapping` plus a plugin construction smoke test. Run via
+  `./gradlew :esp_provisioning_flutter:testDebugUnitTest` from the
+  example project.
+- Example app gains: live `EspProvisioningPhase` chip beside the
+  status line, dismissable error banner showing the sealed
+  exception code + message, transport-aware Cancel button next to
+  the Scan action (uses `stopBleScan`).
+- README adds a migration guide for users of the community
+  `flutter_esp_ble_prov` package, a SoftAP-per-platform behaviour
+  table, and pub-score / platform badges.
+- Version bumped to 0.0.5 (PR #2 → 0.0.1, PR #3 → iOS bridge,
+  PR #4 → Android bridge, PR #5 → SoftAP, PR #6 → tests + polish).
+  1.0.0 stabilises after pilot-batch real-device verification.
+
 ### Added (PR #5 — SoftAP fallback transport)
 
 - New `EspProvisioning.scanSoftApDevices({devicePrefix, timeout})` for
