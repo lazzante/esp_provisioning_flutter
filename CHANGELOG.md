@@ -4,6 +4,33 @@ All notable changes to `esp_provisioning_flutter` will be documented in this
 file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the package follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added (PR #3 — iOS native bridge)
+
+- Pinned `ESPProvision` ~> 3.1 in the podspec.
+- `ProvisioningBridge.swift` wraps the ESPProvision SDK behind a single
+  per-plugin state machine: discovered-device cache, in-flight scan +
+  connect guards, lifecycle event emission, and main-queue marshalling
+  of every callback.
+- `BluetoothStateProbe.swift` resolves Core Bluetooth state before the
+  first scan so callers receive a typed `BleUnavailableException` or
+  `PermissionDeniedException` instead of a generic "no device found".
+- `ErrorMapping.swift` translates ESPSessionError / ESPWiFiScanError /
+  ESPProvisionError into the sealed Dart exception vocabulary, with
+  security-level-aware handling of `sessionInitError` (wrong PoP under
+  sec1/sec2 → `pop_invalid`).
+- Wires every method-channel call (`scanBleDevices`, `stopBleScan`,
+  `connect`, `scanWifiNetworks`, `provisionWifi`, `sendCustomData`,
+  `disconnect`) to real SDK invocations.
+- Custom data path (`sendCustomData`) supports RainyBit bootstrap-token
+  transfer over the encrypted session.
+- Lifecycle events for every phase: scanStarted/Finished, connecting,
+  sessionEstablishing/Established, wifiScanning, applyingCredentials,
+  finished, disconnected.
+- Example app `Info.plist` carries the required Bluetooth / local-network
+  usage descriptions; Podfile pins `platform :ios, '13.0'`.
+
 ## 0.0.1 - 2026-05-14
 
 ### Added

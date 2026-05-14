@@ -4,6 +4,12 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>This example app uses Bluetooth to discover and configure ESP32 devices in provisioning mode.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>This example app uses Bluetooth to discover and configure ESP32 devices in provisioning mode.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>This example app uses the local network to communicate with ESP32 devices over SoftAP while they join your Wi-Fi.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

@@ -3,61 +3,126 @@ import UIKit
 
 /// iOS host plugin for `esp_provisioning_flutter`.
 ///
-/// PR #2 ships method/event channel scaffolding only — every imperative
-/// method responds with `FlutterMethodNotImplemented` and the event channel
-/// emits no events. PR #3 will wire these handlers to Espressif's
-/// `ESPProvision` Pod (X25519/AES-GCM session, BLE GATT transport, custom
-/// data endpoints).
-///
-/// Channel naming: `com.rainybit.esp_provisioning_flutter/methods` for RPC,
-/// `com.rainybit.esp_provisioning_flutter/events` for the lifecycle stream.
-/// The Dart-side `MethodChannelEspProvisioning` references these strings
-/// verbatim — keep in sync if either side renames.
-public class EspProvisioningFlutterPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
-  private static let methodChannelName = "com.rainybit.esp_provisioning_flutter/methods"
-  private static let eventChannelName = "com.rainybit.esp_provisioning_flutter/events"
+/// Owns the method channel, the event channel, and the `ProvisioningBridge`
+/// instance that talks to Espressif's `ESPProvision` SDK. The plugin class
+/// itself is deliberately thin — every non-trivial decision lives in the
+/// bridge, so the bridge can be unit-tested in isolation later (PR #6) and
+/// so this class remains a near-pure wire format adapter.
+public class EspProvisioningFlutterPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, EspEventEmitter {
 
-  private var eventSink: FlutterEventSink?
+    private static let methodChannelName = "com.rainybit.esp_provisioning_flutter/methods"
+    private static let eventChannelName = "com.rainybit.esp_provisioning_flutter/events"
 
-  public static func register(with registrar: FlutterPluginRegistrar) {
-    let instance = EspProvisioningFlutterPlugin()
+    private var eventSink: FlutterEventSink?
+    private var bridge: ProvisioningBridge!
 
-    let methodChannel = FlutterMethodChannel(
-      name: methodChannelName,
-      binaryMessenger: registrar.messenger()
-    )
-    registrar.addMethodCallDelegate(instance, channel: methodChannel)
+    public static func register(with registrar: FlutterPluginRegistrar) {
+        let instance = EspProvisioningFlutterPlugin()
+        instance.bridge = ProvisioningBridge(eventEmitter: instance)
 
-    let eventChannel = FlutterEventChannel(
-      name: eventChannelName,
-      binaryMessenger: registrar.messenger()
-    )
-    eventChannel.setStreamHandler(instance)
-  }
+        let methodChannel = FlutterMethodChannel(
+            name: methodChannelName,
+            binaryMessenger: registrar.messenger())
+        registrar.addMethodCallDelegate(instance, channel: methodChannel)
 
-  public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-    switch call.method {
-    case "scanBleDevices",
-         "stopBleScan",
-         "connect",
-         "scanWifiNetworks",
-         "provisionWifi",
-         "sendCustomData",
-         "disconnect":
-      // Wired in PR #3 once the ESPProvision Pod is integrated.
-      result(FlutterMethodNotImplemented)
-    default:
-      result(FlutterMethodNotImplemented)
+        let eventChannel = FlutterEventChannel(
+            name: eventChannelName,
+            binaryMessenger: registrar.messenger())
+        eventChannel.setStreamHandler(instance)
     }
-  }
 
-  public func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
-    self.eventSink = events
-    return nil
-  }
+    public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        switch call.method {
+        case "scanBleDevices":
+            guard let args = call.arguments as? [String: Any],
+                  let prefix = args["devicePrefix"] as? String,
+                  let timeoutMs = args["timeoutMs"] as? Int else {
+                result(invalidArgumentsError(for: call.method))
+                return
+            }
+            bridge.scanBleDevices(devicePrefix: prefix,
+                                  timeoutMs: timeoutMs,
+                                  result: result)
 
-  public func onCancel(withArguments arguments: Any?) -> FlutterError? {
-    self.eventSink = nil
-    return nil
-  }
+        case "stopBleScan":
+            bridge.stopBleScan(result: result)
+
+        case "connect":
+            guard let args = call.arguments as? [String: Any],
+                  let deviceMap = args["device"] as? [String: Any?],
+                  let pop = args["proofOfPossession"] as? String,
+                  let security = args["security"] as? Int else {
+                result(invalidArgumentsError(for: call.method))
+                return
+            }
+            bridge.connect(deviceMap: deviceMap,
+                           proofOfPossession: pop,
+                           security: security,
+                           result: result)
+
+        case "scanWifiNetworks":
+            bridge.scanWifiNetworks(result: result)
+
+        case "provisionWifi":
+            guard let args = call.arguments as? [String: Any],
+                  let ssid = args["ssid"] as? String,
+                  let passphrase = args["passphrase"] as? String else {
+                result(invalidArgumentsError(for: call.method))
+                return
+            }
+            bridge.provisionWifi(ssid: ssid, passphrase: passphrase, result: result)
+
+        case "sendCustomData":
+            guard let args = call.arguments as? [String: Any],
+                  let endpoint = args["endpoint"] as? String,
+                  let data = args["data"] as? FlutterStandardTypedData else {
+                result(invalidArgumentsError(for: call.method))
+                return
+            }
+            bridge.sendCustomData(endpoint: endpoint, data: data, result: result)
+
+        case "disconnect":
+            bridge.disconnect(result: result)
+
+        default:
+            result(FlutterMethodNotImplemented)
+        }
+    }
+
+    private func invalidArgumentsError(for method: String) -> FlutterError {
+        return FlutterError(
+            code: "session_failed",
+            message: "Invalid arguments for method '\(method)'",
+            details: nil)
+    }
+
+    // MARK: - FlutterStreamHandler
+
+    public func onListen(withArguments arguments: Any?,
+                         eventSink events: @escaping FlutterEventSink) -> FlutterError? {
+        self.eventSink = events
+        return nil
+    }
+
+    public func onCancel(withArguments arguments: Any?) -> FlutterError? {
+        self.eventSink = nil
+        return nil
+    }
+
+    // MARK: - EspEventEmitter
+
+    func emit(_ event: [String: Any?]) {
+        // EventSink may be nil if no Dart-side listener is attached; that
+        // is a normal state — events are advisory and the imperative API
+        // still returns the authoritative result. We drop events silently
+        // rather than buffering.
+        let sink = self.eventSink
+        if Thread.isMainThread {
+            sink?(event)
+        } else {
+            DispatchQueue.main.async {
+                sink?(event)
+            }
+        }
+    }
 }

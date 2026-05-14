@@ -1,0 +1,41 @@
+PODS:
+  - esp_provisioning_flutter (0.0.1):
+    - ESPProvision (~> 3.1)
+    - Flutter
+  - ESPProvision (3.1.0):
+    - ESPProvision/Core (= 3.1.0)
+  - ESPProvision/Core (3.1.0):
+    - SwiftProtobuf (~> 1.22.0)
+  - Flutter (1.0.0)
+  - integration_test (0.0.1):
+    - Flutter
+  - SwiftProtobuf (1.22.1)
+
+DEPENDENCIES:
+  - esp_provisioning_flutter (from `.symlinks/plugins/esp_provisioning_flutter/ios`)
+  - Flutter (from `Flutter`)
+  - integration_test (from `.symlinks/plugins/integration_test/ios`)
+
+SPEC REPOS:
+  trunk:
+    - ESPProvision
+    - SwiftProtobuf
+
+EXTERNAL SOURCES:
+  esp_provisioning_flutter:
+    :path: ".symlinks/plugins/esp_provisioning_flutter/ios"
+  Flutter:
+    :path: Flutter
+  integration_test:
+    :path: ".symlinks/plugins/integration_test/ios"
+
+SPEC CHECKSUMS:
+  esp_provisioning_flutter: f443cd2de15318f07706eb72516bb766480dc537
+  ESPProvision: a24f5156726f9dd4444f856cbed895a7af50aaf9
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
+  SwiftProtobuf: 7773c4e96a99d7b8ab7cda0fc30a883732ff93b1
+
+PODFILE CHECKSUM: f435a58c2ef819896c7d755552351668af34750a
+
+COCOAPODS: 1.16.2
