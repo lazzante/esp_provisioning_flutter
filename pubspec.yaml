@@ -1,0 +1,37 @@
+name: esp_provisioning_flutter
+description: "Flutter plugin for provisioning ESP32 devices over BLE and SoftAP. Wraps Espressif's official iOS (ESPProvision) and Android (esp-idf-provisioning-android) SDKs."
+version: 0.0.1
+homepage: https://github.com/lazzante/esp_provisioning_flutter
+repository: https://github.com/lazzante/esp_provisioning_flutter
+issue_tracker: https://github.com/lazzante/esp_provisioning_flutter/issues
+
+topics:
+  - esp32
+  - provisioning
+  - ble
+  - iot
+  - wifi
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.3.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  plugin_platform_interface: ^2.1.8
+  meta: ^1.11.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.rainybit.esp_provisioning_flutter
+        pluginClass: EspProvisioningFlutterPlugin
+      ios:
+        pluginClass: EspProvisioningFlutterPlugin
