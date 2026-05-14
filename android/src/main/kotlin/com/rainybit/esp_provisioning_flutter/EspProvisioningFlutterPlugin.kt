@@ -70,11 +70,25 @@ class EspProvisioningFlutterPlugin :
                 bridge.scanBleDevices(prefix, timeoutMs, result)
             }
             "stopBleScan" -> bridge.stopBleScan(result)
+            "scanSoftApDevices" -> {
+                val prefix = call.argument<String>("devicePrefix")
+                val timeoutMs = call.argument<Int>("timeoutMs")
+                if (prefix == null || timeoutMs == null) {
+                    result.error(
+                        "session_failed",
+                        "Invalid arguments for 'scanSoftApDevices'",
+                        null
+                    )
+                    return
+                }
+                bridge.scanSoftApDevices(prefix, timeoutMs, result)
+            }
             "connect" -> {
                 @Suppress("UNCHECKED_CAST")
                 val deviceMap = call.argument<Map<String, Any?>>("device")
                 val pop = call.argument<String>("proofOfPossession")
                 val security = call.argument<Int>("security")
+                val softApPassphrase = call.argument<String>("softApPassphrase")
                 if (deviceMap == null || pop == null || security == null) {
                     result.error(
                         "session_failed",
@@ -83,7 +97,7 @@ class EspProvisioningFlutterPlugin :
                     )
                     return
                 }
-                bridge.connect(deviceMap, pop, security, result)
+                bridge.connect(deviceMap, pop, security, softApPassphrase, result)
             }
             "scanWifiNetworks" -> bridge.scanWifiNetworks(result)
             "provisionWifi" -> {

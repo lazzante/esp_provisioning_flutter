@@ -98,6 +98,36 @@ class EspProvisioning {
   /// Stops an in-flight BLE scan immediately. No-op when no scan is running.
   Future<void> stopBleScan() => _platform.stopBleScan();
 
+  /// Scans for ESP32 devices advertising as Wi-Fi SoftAP access points.
+  ///
+  /// ## Platform behaviour
+  ///
+  /// **Android**: dispatches to the SDK's
+  /// `searchWiFiEspDevices(prefix, listener)`. Requires
+  /// `ACCESS_WIFI_STATE`, `CHANGE_WIFI_STATE`, and (on API 30 and below)
+  /// `ACCESS_FINE_LOCATION` to read scan results.
+  ///
+  /// **iOS**: programmatic SoftAP scan is not supported by Apple's
+  /// public APIs. Calling this on iOS throws a
+  /// [SessionFailedException] with a clear message. The recommended iOS
+  /// flow is to surface a `TextField` prompting the user for the device
+  /// SSID (printed on the device sticker / QR), construct an
+  /// `EspDevice.softAp(id: ssid, name: ssid)` manually, and pass it to
+  /// [connect]. The native `NEHotspotConfiguration` prompt then takes
+  /// care of joining the AP for the user.
+  ///
+  /// Returns the deduplicated list of devices observed during the scan
+  /// window. The list may be empty.
+  Future<List<EspDevice>> scanSoftApDevices({
+    required String devicePrefix,
+    Duration timeout = const Duration(seconds: 10),
+  }) {
+    return _platform.scanSoftApDevices(
+      devicePrefix: devicePrefix,
+      timeout: timeout,
+    );
+  }
+
   /// Connects to [device] and establishes an authenticated, encrypted
   /// provisioning session.
   ///
@@ -106,21 +136,34 @@ class EspProvisioning {
   /// the [security] handshake (default [EspSecurity.security2], SRP6a +
   /// AES-GCM) and stores the resulting session key for subsequent calls.
   ///
+  /// When [device]'s transport is [EspDeviceTransport.softAp],
+  /// [softApPassphrase] is the password of the device's provisioning
+  /// access point (often empty for ESP-IDF stock firmware). It is
+  /// ignored for BLE devices.
+  ///
+  /// On iOS, joining a SoftAP triggers Apple's system-level
+  /// `NEHotspotConfiguration` prompt — the user must confirm joining
+  /// the device's network before provisioning continues.
+  ///
   /// Throws:
   ///   * [DeviceNotFoundException] — device is out of range or already
   ///     connected to another central.
   ///   * [PopInvalidException] — PoP rejected by the device firmware.
   ///   * [SessionFailedException] — handshake failure not attributable to a
   ///     wrong PoP (transport drop, protocol mismatch).
+  ///   * [SoftApConnectionException] — could not associate with the
+  ///     SoftAP (user denied the prompt, AP out of range, etc.).
   Future<void> connect({
     required EspDevice device,
     required String proofOfPossession,
     EspSecurity security = EspSecurity.security2,
+    String? softApPassphrase,
   }) {
     return _platform.connect(
       device: device,
       proofOfPossession: proofOfPossession,
       security: security,
+      softApPassphrase: softApPassphrase,
     );
   }
 

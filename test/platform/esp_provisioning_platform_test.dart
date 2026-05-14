@@ -34,16 +34,33 @@ final class _FakePlatform extends EspProvisioningPlatform
   }
 
   @override
+  Future<List<EspDevice>> scanSoftApDevices({
+    required String devicePrefix,
+    required Duration timeout,
+  }) async {
+    lastMethod = 'scanSoftApDevices';
+    lastArgs = <String, Object?>{
+      'devicePrefix': devicePrefix,
+      'timeout': timeout,
+    };
+    return const <EspDevice>[
+      EspDevice.softAp(id: 'PROV_X', name: 'PROV_X', rssi: -42),
+    ];
+  }
+
+  @override
   Future<void> connect({
     required EspDevice device,
     required String proofOfPossession,
     required EspSecurity security,
+    String? softApPassphrase,
   }) async {
     lastMethod = 'connect';
     lastArgs = <String, Object?>{
       'device': device,
       'pop': proofOfPossession,
       'security': security,
+      'softApPassphrase': softApPassphrase,
     };
   }
 
@@ -129,6 +146,39 @@ void main() {
   test('stopBleScan reaches the platform', () async {
     await esp.stopBleScan();
     expect(fake.lastMethod, 'stopBleScan');
+  });
+
+  test('scanSoftApDevices forwards prefix + timeout to the platform', () async {
+    final devices = await esp.scanSoftApDevices(
+      devicePrefix: 'PROV_',
+      timeout: const Duration(seconds: 8),
+    );
+    expect(fake.lastMethod, 'scanSoftApDevices');
+    expect(fake.lastArgs!['devicePrefix'], 'PROV_');
+    expect(fake.lastArgs!['timeout'], const Duration(seconds: 8));
+    expect(devices, hasLength(1));
+    expect(devices.single.transport, EspDeviceTransport.softAp);
+  });
+
+  test('scanSoftApDevices uses the documented default timeout', () async {
+    await esp.scanSoftApDevices(devicePrefix: 'PROV_');
+    expect(fake.lastArgs!['timeout'], const Duration(seconds: 10));
+  });
+
+  test('connect forwards softApPassphrase when provided', () async {
+    const device = EspDevice.softAp(id: 'PROV_X', name: 'PROV_X');
+    await esp.connect(
+      device: device,
+      proofOfPossession: 'pop',
+      softApPassphrase: 'ap-secret',
+    );
+    expect(fake.lastArgs!['softApPassphrase'], 'ap-secret');
+  });
+
+  test('connect leaves softApPassphrase null for BLE devices', () async {
+    const device = EspDevice.ble(id: 'AA', name: 'PROV_X');
+    await esp.connect(device: device, proofOfPossession: 'pop');
+    expect(fake.lastArgs!['softApPassphrase'], isNull);
   });
 
   test('connect defaults to security2', () async {

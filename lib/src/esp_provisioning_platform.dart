@@ -56,13 +56,30 @@ abstract base class EspProvisioningPlatform extends PlatformInterface {
   /// Stops any in-flight BLE scan. Safe to call when no scan is running.
   Future<void> stopBleScan();
 
+  /// Scans for ESP32 devices advertising as Wi-Fi SoftAP access points.
+  ///
+  /// Note: iOS does **not** support programmatic SoftAP scan — calling
+  /// this method on iOS results in a `SessionFailedException`. Android
+  /// implementations dispatch to the SDK's
+  /// `searchWiFiEspDevices(prefix, listener)` and return matching APs.
+  Future<List<EspDevice>> scanSoftApDevices({
+    required String devicePrefix,
+    required Duration timeout,
+  });
+
   /// Connects to [device] and establishes a secure provisioning session
   /// using [proofOfPossession] and [security]. Throws an
   /// [EspProvisioningException] on failure.
+  ///
+  /// When [device.transport] is [EspDeviceTransport.softAp],
+  /// [softApPassphrase] is the password of the device's provisioning
+  /// access point (often empty for ESP-IDF stock firmware). Ignored for
+  /// BLE devices.
   Future<void> connect({
     required EspDevice device,
     required String proofOfPossession,
     required EspSecurity security,
+    String? softApPassphrase,
   });
 
   /// Asks the connected device to scan for Wi-Fi networks visible to it.

@@ -67,15 +67,38 @@ final class MethodChannelEspProvisioning extends EspProvisioningPlatform {
   }
 
   @override
+  Future<List<EspDevice>> scanSoftApDevices({
+    required String devicePrefix,
+    required Duration timeout,
+  }) async {
+    return _invoke<List<EspDevice>>('scanSoftApDevices', <String, Object?>{
+      'devicePrefix': devicePrefix,
+      'timeoutMs': timeout.inMilliseconds,
+    }, (Object? raw) {
+      if (raw is! List) {
+        throw const FormatException(
+          'scanSoftApDevices: expected a list of devices',
+        );
+      }
+      return raw
+          .whereType<Map>()
+          .map((m) => EspDevice.fromMap(Map<Object?, Object?>.from(m)))
+          .toList(growable: false);
+    });
+  }
+
+  @override
   Future<void> connect({
     required EspDevice device,
     required String proofOfPossession,
     required EspSecurity security,
+    String? softApPassphrase,
   }) async {
     await _invoke<void>('connect', <String, Object?>{
       'device': device.toMap(),
       'proofOfPossession': proofOfPossession,
       'security': security.protocolVersion,
+      'softApPassphrase': softApPassphrase,
     }, (_) {});
   }
 

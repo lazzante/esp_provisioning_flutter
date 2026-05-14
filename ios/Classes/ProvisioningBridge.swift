@@ -133,6 +133,7 @@ final class ProvisioningBridge {
         deviceMap: [String: Any?],
         proofOfPossession: String,
         security: Int,
+        softApPassphrase: String?,
         result: @escaping FlutterResult
     ) {
         if connectInFlight || connectedDevice != nil {
@@ -151,25 +152,44 @@ final class ProvisioningBridge {
             return
         }
 
-        guard let device = discoveredDevices[deviceId] else {
-            result(FlutterError(
-                code: "device_not_found",
-                message: "Device '\(deviceId)' is no longer in the scan cache. Re-scan and try again.",
-                details: ["deviceId": deviceId]))
-            return
+        let transportRaw = (deviceMap["transport"] as? String) ?? "ble"
+        let espSecurity = ESPSecurity(rawValue: security)
+        activeSecurity = espSecurity
+
+        let device: ESPDevice
+        if transportRaw == "softAp" || transportRaw == "softap" {
+            // SoftAP devices are not cached because iOS cannot enumerate
+            // them — the SSID arrives from the caller (Dart `EspDevice.softAp`).
+            // We materialise a fresh ESPDevice via the public initialiser;
+            // ESPProvisionManager.createESPDevice would also work but it
+            // is callback-based and adds nothing here.
+            device = ESPDevice(
+                name: deviceId,
+                security: espSecurity,
+                transport: .softap,
+                proofOfPossession: proofOfPossession,
+                username: espSecurity == .secure2 ? kDefaultSecurity2Username : nil,
+                network: .wifi,
+                softAPPassword: softApPassphrase ?? ""
+            )
+        } else {
+            guard let bleDevice = discoveredDevices[deviceId] else {
+                result(FlutterError(
+                    code: "device_not_found",
+                    message: "Device '\(deviceId)' is no longer in the scan cache. Re-scan and try again.",
+                    details: ["deviceId": deviceId]))
+                return
+            }
+            bleDevice.security = espSecurity
+            // `proofOfPossession` is `internal` on ESPDevice — we cannot
+            // set it directly. The PopDelegate supplies it through the
+            // public delegate callback during initialiseSession.
+            if espSecurity == .secure2 {
+                bleDevice.username = kDefaultSecurity2Username
+            }
+            device = bleDevice
         }
 
-        let espSecurity = ESPSecurity(rawValue: security)
-        device.security = espSecurity
-        // `proofOfPossession` is `internal` on ESPDevice — we cannot set it
-        // directly. The PopDelegate below supplies it through the public
-        // delegate callback that ESPDevice.initialiseSession invokes when
-        // its own `proofOfPossession` slot is nil (which it always is for
-        // devices freshly discovered by `searchESPDevices`).
-        if espSecurity == .secure2 {
-            device.username = kDefaultSecurity2Username
-        }
-        activeSecurity = espSecurity
         connectInFlight = true
 
         let popDelegate = PopDelegate(pop: proofOfPossession,

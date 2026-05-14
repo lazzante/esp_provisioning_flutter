@@ -36,7 +36,11 @@ class _ProvisioningHomePageState extends State<ProvisioningHomePage> {
       TextEditingController(text: 'abcd1234');
   final TextEditingController _ssidController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _softApPassController = TextEditingController();
+  final TextEditingController _manualSsidController =
+      TextEditingController(text: 'PROV_');
 
+  EspDeviceTransport _transport = EspDeviceTransport.ble;
   List<EspDevice> _devices = const <EspDevice>[];
   EspDevice? _connectedDevice;
   List<WifiNetwork> _networks = const <WifiNetwork>[];
@@ -62,6 +66,8 @@ class _ProvisioningHomePageState extends State<ProvisioningHomePage> {
     _popController.dispose();
     _ssidController.dispose();
     _passwordController.dispose();
+    _softApPassController.dispose();
+    _manualSsidController.dispose();
     super.dispose();
   }
 
@@ -80,8 +86,10 @@ class _ProvisioningHomePageState extends State<ProvisioningHomePage> {
     }
   }
 
-  Future<void> _scan() => _run('Scan BLE', () async {
-        final devices = await _esp.scanBleDevices(devicePrefix: 'PROV_');
+  Future<void> _scan() => _run('Scan ${_transport.name}', () async {
+        final devices = _transport == EspDeviceTransport.ble
+            ? await _esp.scanBleDevices(devicePrefix: 'PROV_')
+            : await _esp.scanSoftApDevices(devicePrefix: 'PROV_');
         setState(() => _devices = devices);
       });
 
@@ -89,6 +97,21 @@ class _ProvisioningHomePageState extends State<ProvisioningHomePage> {
         await _esp.connect(
           device: device,
           proofOfPossession: _popController.text,
+          softApPassphrase: device.transport == EspDeviceTransport.softAp
+              ? _softApPassController.text
+              : null,
+        );
+        setState(() => _connectedDevice = device);
+      });
+
+  Future<void> _connectManualSoftAp() => _run('Connect SoftAP (manual)', () async {
+        final ssid = _manualSsidController.text.trim();
+        if (ssid.isEmpty) return;
+        final device = EspDevice.softAp(id: ssid, name: ssid);
+        await _esp.connect(
+          device: device,
+          proofOfPossession: _popController.text,
+          softApPassphrase: _softApPassController.text,
         );
         setState(() => _connectedDevice = device);
       });
@@ -125,17 +148,70 @@ class _ProvisioningHomePageState extends State<ProvisioningHomePage> {
           children: [
             Text('Status: $_status', style: const TextStyle(fontFamily: 'monospace')),
             const Divider(height: 32),
+            SegmentedButton<EspDeviceTransport>(
+              segments: const <ButtonSegment<EspDeviceTransport>>[
+                ButtonSegment(
+                  value: EspDeviceTransport.ble,
+                  label: Text('BLE'),
+                  icon: Icon(Icons.bluetooth),
+                ),
+                ButtonSegment(
+                  value: EspDeviceTransport.softAp,
+                  label: Text('SoftAP'),
+                  icon: Icon(Icons.wifi),
+                ),
+              ],
+              selected: <EspDeviceTransport>{_transport},
+              onSelectionChanged: _busy
+                  ? null
+                  : (s) => setState(() {
+                        _transport = s.first;
+                        _devices = const <EspDevice>[];
+                      }),
+            ),
+            const SizedBox(height: 16),
             TextField(
               controller: _popController,
               decoration: const InputDecoration(
                 labelText: 'Proof of Possession (PoP)',
               ),
             ),
+            if (_transport == EspDeviceTransport.softAp) ...[
+              const SizedBox(height: 8),
+              TextField(
+                controller: _softApPassController,
+                decoration: const InputDecoration(
+                  labelText: 'SoftAP password (blank if open)',
+                ),
+                obscureText: true,
+              ),
+            ],
             const SizedBox(height: 16),
             FilledButton(
               onPressed: _busy ? null : _scan,
-              child: const Text('1. Scan BLE devices'),
+              child: Text('1. Scan ${_transport.name} devices'),
             ),
+            if (_transport == EspDeviceTransport.softAp) ...[
+              const SizedBox(height: 8),
+              // iOS cannot enumerate Wi-Fi networks — fall back to a manual
+              // SSID entry so the user can connect to a known AP they
+              // already joined via Settings.
+              Row(children: [
+                Expanded(
+                  child: TextField(
+                    controller: _manualSsidController,
+                    decoration: const InputDecoration(
+                      labelText: 'Device SSID (iOS: enter manually)',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  onPressed: _busy ? null : _connectManualSoftAp,
+                  child: const Text('Connect'),
+                ),
+              ]),
+            ],
             const SizedBox(height: 8),
             if (_devices.isEmpty)
               const Text('(no devices yet)')

@@ -175,7 +175,8 @@ that your app controls prompt timing and rationale UI.
 |---|---|
 | `scanBleDevices({devicePrefix, timeout})` | Discover devices advertising in BLE provisioning mode. |
 | `stopBleScan()` | Cancel an in-flight scan. |
-| `connect({device, proofOfPossession, security})` | Open authenticated, encrypted session. |
+| `scanSoftApDevices({devicePrefix, timeout})` | Discover devices broadcasting as Wi-Fi SoftAP access points. **Android only** — iOS throws `SessionFailedException`. |
+| `connect({device, proofOfPossession, security, softApPassphrase})` | Open authenticated, encrypted session. `softApPassphrase` is only honoured when `device.transport == softAp`. |
 | `scanWifiNetworks()` | Ask the device for the Wi-Fi networks it can see. |
 | `provisionWifi({ssid, passphrase})` | Send credentials, await apply result. |
 | `sendCustomData({endpoint, data})` | Exchange arbitrary bytes on a custom ESP-IDF endpoint. |
@@ -188,14 +189,60 @@ authoritative contract.
 
 ---
 
+## SoftAP transport
+
+Some ESP-IDF firmware exposes provisioning over a Wi-Fi access point
+(SoftAP) instead of, or in addition to, BLE. The plugin supports both
+transports through the same `connect()` / `scanWifiNetworks()` /
+`provisionWifi()` / `sendCustomData()` surface.
+
+### Discovery
+
+| Platform | SoftAP scan | How to discover the SSID |
+|---|---|---|
+| Android | Supported via `scanSoftApDevices(devicePrefix: 'PROV_')`. | The plugin scans Wi-Fi visible to the host phone and filters by the prefix. |
+| iOS | **Not supported by Apple's public APIs.** Calling `scanSoftApDevices` throws `SessionFailedException`. | Prompt the user for the device SSID — it is printed on the device sticker / QR code. |
+
+### Joining the device's SoftAP
+
+| Platform | Behaviour |
+|---|---|
+| Android | The SDK joins the AP programmatically via `WifiNetworkSpecifier` (API 29+) or `WifiManager.enableNetwork()` (older). A system dialog may appear depending on Android version + OEM. |
+| iOS | The plugin invokes `NEHotspotConfiguration` — iOS shows a system prompt the user must accept before provisioning continues. |
+
+### Code
+
+```dart
+// Android: enumerate, pick, connect
+final aps = await esp.scanSoftApDevices(devicePrefix: 'PROV_');
+await esp.connect(
+  device: aps.first,
+  proofOfPossession: 'abcd1234',
+  softApPassphrase: '',          // empty for open ESP-IDF default
+);
+
+// iOS: ask the user, construct device manually, connect
+const device = EspDevice.softAp(id: 'PROV_AB12CD', name: 'PROV_AB12CD');
+await esp.connect(
+  device: device,
+  proofOfPossession: 'abcd1234',
+  softApPassphrase: '',
+);
+```
+
+The remaining flow (`scanWifiNetworks`, `provisionWifi`, `sendCustomData`,
+`disconnect`) is transport-agnostic.
+
+---
+
 ## Roadmap
 
 | PR | Scope |
 |---|---|
-| **#2 (this PR)** | Plugin scaffold, Dart API, sealed exceptions, unit tests, example app skeleton |
-| #3 | iOS native bridge — wire ESPProvision Pod into the Swift handlers |
-| #4 | Android native bridge — wire `esp-idf-provisioning-android` library into Kotlin handlers |
-| #5 | SoftAP fallback transport (BLE + SoftAP unified API) |
+| **#2** | Plugin scaffold, Dart API, sealed exceptions, unit tests, example app skeleton |
+| **#3** | iOS native bridge — ESPProvision Pod |
+| **#4** | Android native bridge — esp-idf-provisioning-android (JitPack) |
+| **#5** | SoftAP fallback transport (BLE + SoftAP unified API) |
 | #6 | Integration tests + example app polish + pub.dev publication |
 
 ---

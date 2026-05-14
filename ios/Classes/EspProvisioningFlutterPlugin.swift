@@ -47,6 +47,18 @@ public class EspProvisioningFlutterPlugin: NSObject, FlutterPlugin, FlutterStrea
         case "stopBleScan":
             bridge.stopBleScan(result: result)
 
+        case "scanSoftApDevices":
+            // iOS has no programmatic SoftAP scan — Apple does not expose
+            // a public API for arbitrary Wi-Fi network enumeration. The
+            // expected iOS flow is to prompt the user for the device
+            // SSID and pass an EspDevice.softAp(...) directly to connect.
+            result(FlutterError(
+                code: "session_failed",
+                message: "iOS does not support programmatic SoftAP scan. " +
+                    "Prompt the user for the device SSID and pass an " +
+                    "EspDevice.softAp(id: ssid, name: ssid) to connect() instead.",
+                details: nil))
+
         case "connect":
             guard let args = call.arguments as? [String: Any],
                   let deviceMap = args["device"] as? [String: Any?],
@@ -55,9 +67,11 @@ public class EspProvisioningFlutterPlugin: NSObject, FlutterPlugin, FlutterStrea
                 result(invalidArgumentsError(for: call.method))
                 return
             }
+            let softApPassphrase = args["softApPassphrase"] as? String
             bridge.connect(deviceMap: deviceMap,
                            proofOfPossession: pop,
                            security: security,
+                           softApPassphrase: softApPassphrase,
                            result: result)
 
         case "scanWifiNetworks":

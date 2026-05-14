@@ -242,11 +242,96 @@ internal class ProvisioningBridge(
         result.success(null)
     }
 
+    /**
+     * SoftAP scan support — Android exposes `searchWiFiEspDevices` which
+     * wraps `WifiManager.getScanResults()` with the SDK's prefix filter.
+     * iOS counterpart returns a `session_failed` error because Apple
+     * does not expose programmatic Wi-Fi enumeration.
+     */
+    @SuppressLint("MissingPermission")
+    fun scanSoftApDevices(devicePrefix: String, timeoutMs: Int, result: MethodChannel.Result) {
+        if (scanInFlight) {
+            try {
+                provisionManager.stopBleScan()
+            } catch (_: Throwable) { /* best effort */ }
+            cancelScanTimer()
+            scanResult?.success(emptyList<Map<String, Any?>>())
+            scanResult = null
+            scanInFlight = false
+            emit(phase = "scanFinished", message = "superseded by softap scan")
+        }
+
+        // Re-use the same probe — the SoftAP scan still requires
+        // ACCESS_FINE_LOCATION on API ≤ 32 (Android's location-coupled
+        // Wi-Fi scanning policy) and ACCESS_WIFI_STATE / CHANGE_WIFI_STATE
+        // from the manifest. The probe checks the BLE-side permissions
+        // by default; we accept that as a coarse "BLE is also up" gate
+        // since both transports share the location-permission story
+        // pre-Android 12.
+        when (val avail = BluetoothStateProbe.check(applicationContext)) {
+            is BluetoothAvailability.PermissionDenied -> {
+                result.error(
+                    "permission_denied",
+                    "Runtime Wi-Fi/BLE permission '${avail.permission}' is not granted",
+                    mapOf("permission" to avail.permission)
+                )
+                return
+            }
+            else -> Unit
+        }
+
+        scanInFlight = true
+        scanResult = result
+        discoveredDevices.clear()
+        emit(phase = "scanStarted")
+
+        provisionManager.searchWiFiEspDevices(devicePrefix, object : WiFiScanListener {
+            override fun onWifiListReceived(wifiList: ArrayList<WiFiAccessPoint>) {
+                mainHandler.post {
+                    if (!scanInFlight) return@post
+                    cancelScanTimer()
+                    scanInFlight = false
+                    val payload = wifiList.map { ap ->
+                        mapOf<String, Any?>(
+                            "id" to ap.wifiName,
+                            "name" to ap.wifiName,
+                            "transport" to "softAp",
+                            "rssi" to ap.rssi,
+                            "serviceUuid" to null,
+                            "bssid" to null,
+                        )
+                    }
+                    emit(phase = "scanFinished")
+                    scanResult?.success(payload)
+                    scanResult = null
+                }
+            }
+
+            override fun onWiFiScanFailed(e: Exception) {
+                mainHandler.post {
+                    if (!scanInFlight) return@post
+                    cancelScanTimer()
+                    scanInFlight = false
+                    emit(phase = "scanFinished", message = e.message)
+                    scanResult?.error(
+                        "session_failed",
+                        e.message ?: "Wi-Fi SoftAP scan failed",
+                        null
+                    )
+                    scanResult = null
+                }
+            }
+        })
+
+        installScanTimer(timeoutMs)
+    }
+
     @SuppressLint("MissingPermission")
     fun connect(
         deviceMap: Map<String, Any?>,
         proofOfPossession: String,
         security: Int,
+        softApPassphrase: String?,
         result: MethodChannel.Result
     ) {
         if (connectInFlight || connectedDevice != null) {
@@ -268,8 +353,40 @@ internal class ProvisioningBridge(
             return
         }
 
+        val transportRaw = (deviceMap["transport"] as? String) ?: "ble"
+        val espSecurity = securityFromInt(security)
+        activeSecurity = espSecurity
+        connectInFlight = true
+        connectResult = result
+        pendingConnectDeviceId = deviceId
+        ensureEventBusRegistered()
+
+        if (transportRaw == "softAp" || transportRaw == "softap") {
+            // SoftAP path: SDK joins the AP for us via WifiNetworkSpecifier
+            // (API 29+) or WifiManager (older). System-level dialog may or
+            // may not appear depending on Android version + OEM policy.
+            val device = provisionManager.createESPDevice(
+                ESPConstants.TransportType.TRANSPORT_SOFTAP,
+                espSecurity
+            )
+            device.deviceName = deviceId
+            device.proofOfPossession = proofOfPossession
+            if (espSecurity == ESPConstants.SecurityType.SECURITY_2) {
+                device.userName = DEFAULT_SECURITY2_USERNAME
+            }
+            emit(phase = "connecting", deviceId = deviceId)
+            emit(phase = "sessionEstablishing", deviceId = deviceId)
+            device.connectWiFiDevice(deviceId, softApPassphrase ?: "")
+            // Resolution via onDeviceConnectionEvent.
+            return
+        }
+
+        // BLE path.
         val entry = discoveredDevices[deviceId]
         if (entry == null) {
+            connectInFlight = false
+            connectResult = null
+            pendingConnectDeviceId = ""
             result.error(
                 "device_not_found",
                 "Device '$deviceId' is no longer in the scan cache. Re-scan and try again.",
@@ -277,13 +394,6 @@ internal class ProvisioningBridge(
             )
             return
         }
-
-        val espSecurity = securityFromInt(security)
-        activeSecurity = espSecurity
-        connectInFlight = true
-        connectResult = result
-        pendingConnectDeviceId = deviceId
-        ensureEventBusRegistered()
 
         val device = provisionManager.createESPDevice(
             ESPConstants.TransportType.TRANSPORT_BLE,

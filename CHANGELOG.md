@@ -6,6 +6,26 @@ and the package follows [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## Unreleased
 
+### Added (PR #5 — SoftAP fallback transport)
+
+- New `EspProvisioning.scanSoftApDevices({devicePrefix, timeout})` for
+  enumerating ESP32 devices broadcasting as Wi-Fi access points.
+  Android dispatches to the SDK's `searchWiFiEspDevices`; iOS returns a
+  typed `SessionFailedException` because Apple does not expose
+  programmatic Wi-Fi enumeration.
+- New `softApPassphrase` parameter on `connect()` — the password of the
+  device's provisioning SoftAP (often empty for ESP-IDF stock firmware).
+  Ignored for BLE devices.
+- iOS bridge now routes `device.transport == softAp` through
+  `ESPDevice(transport: .softap, ...)` + `NEHotspotConfiguration`, with
+  the user accepting the system prompt to join the device's AP.
+- Android bridge routes `device.transport == softAp` through
+  `createESPDevice(TRANSPORT_SOFTAP, ...) → connectWiFiDevice(ssid, password)`.
+- Example app gets a `SegmentedButton` transport selector + a manual
+  SSID entry for iOS SoftAP flows.
+- README documents per-platform SoftAP capabilities and code snippets
+  for both flows.
+
 ### Added (PR #4 — Android native bridge)
 
 - Pinned `com.github.espressif:esp-idf-provisioning-android:lib-2.4.4`
